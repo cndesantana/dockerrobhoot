@@ -1,0 +1,55 @@
+version: '3.3'                                                                                                                                           
+
+services:
+
+  airflow-db:
+    image: postgres:12.1
+    container_name: airflow-db
+    restart: always
+    environment:
+      - POSTGRES_DB=${AIRFLOW_POSTGRES_DB}
+      - POSTGRES_USER=${AIRFLOW_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${AIRFLOW_POSTGRES_PASSWORD}
+    volumes:
+      - ./airflow/postgres:/var/lib/postgresql/data
+
+  airflow:
+    image: habitissimo/docker-airflow:1.10.6-3
+    container_name: airflow
+    restart: always
+    depends_on:
+      - airflow-db
+      - data-warehouse-db
+    environment:
+      - REPORTING_DB_HOST=data-warehouse-db
+      - REPORTING_DB_NAME=${DATA_WAREHOUSE_POSTGRES_DB}
+      - REPORTING_DB_USER=${DATA_WAREHOUSE_POSTGRES_USER}
+      - REPORTING_DB_PASS=${DATA_WAREHOUSE_POSTGRES_PASSWORD}
+    env_file:
+      - .env
+    volumes:
+      - ./etl/dags:/usr/local/airflow/dags
+      - ../data-warehouse-dags:/usr/local/airflow/dags/data-warehouse-dags
+      - ./airflow/logs:/usr/local/airflow/logs
+      - ./ssl:/ssl
+      - ./config/scripts:/usr/local/airflow/scripts
+      - ./config/google-api-credentials.json:/credentials/google-api-credentials.json
+      - ./config/google-api-data-integrations-credentials.json:/credentials/google-api-data-integrations-credentials.json
+      - ./config/google-adwords.yaml:/credentials/google-adwords.yaml
+      - ${DATA_WAREHOUSE_NVME_DISK_EXTERNAL}:${DATA_WAREHOUSE_NVME_DISK_INTERNAL} # faster disk
+      - ${BACKUP_DESTINATION_DIR_EXTERNAL}:${BACKUP_DESTINATION_DIR_INTERNAL}
+      - "tmpdata:/tmp"
+    ports:
+      - 127.0.0.1:8081:8080
+    command: webserver
+    healthcheck:
+        test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow.pid ]"]
+        interval: 60s
+        timeout: 30s
+        retries: 3
+
+volumes:
+  data-warehouse-db-v11-volume:
+    external: false
+  tmpdata:
+    external: false              
